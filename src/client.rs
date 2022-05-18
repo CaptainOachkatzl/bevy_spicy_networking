@@ -98,6 +98,8 @@ impl NetworkClient {
                         }
                     }
 
+                    error!("Could not connect to server");
+
                     return;
                 }
             };
