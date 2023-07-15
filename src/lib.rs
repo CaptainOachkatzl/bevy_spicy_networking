@@ -213,14 +213,12 @@ struct NetworkPacket {
 
 impl std::fmt::Debug for NetworkPacket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("NetworkPacket")
-            .field("kind", &self.kind)
-            .finish()
+        f.debug_struct("NetworkPacket").field("kind", &self.kind).finish()
     }
 }
 
 /// A network event originating from a [`NetworkServer`]
-#[derive(Debug)]
+#[derive(Debug, Event)]
 pub enum ServerNetworkEvent {
     /// A new client has connected
     Connected(ConnectionId),
@@ -230,7 +228,7 @@ pub enum ServerNetworkEvent {
     Error(NetworkError),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Event)]
 /// A network event originating from a [`NetworkClient`]
 pub enum ClientNetworkEvent {
     /// Connected to a server
@@ -241,7 +239,7 @@ pub enum ClientNetworkEvent {
     Error(NetworkError),
 }
 
-#[derive(Debug, Deref)]
+#[derive(Debug, Deref, Event)]
 /// [`NetworkData`] is what is sent over the bevy event system
 ///
 /// Please check the root documentation how to up everything
@@ -267,7 +265,7 @@ impl<T> NetworkData<T> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Resource)]
 #[allow(missing_copy_implementations)]
 /// Settings to configure the network, both client and server
 pub struct NetworkSettings {
@@ -296,10 +294,7 @@ impl Plugin for ServerPlugin {
         app.insert_resource(server::NetworkServer::new());
         app.add_event::<ServerNetworkEvent>();
         app.init_resource::<NetworkSettings>();
-        app.add_system_to_stage(
-            CoreStage::PreUpdate,
-            server::handle_new_incoming_connections,
-        );
+        app.add_systems(PreUpdate, server::handle_new_incoming_connections);
     }
 }
 
@@ -313,13 +308,7 @@ impl Plugin for ClientPlugin {
         app.insert_resource(client::NetworkClient::new());
         app.add_event::<ClientNetworkEvent>();
         app.init_resource::<NetworkSettings>();
-        app.add_system_to_stage(
-            CoreStage::PreUpdate,
-            client::send_client_network_events,
-        );
-        app.add_system_to_stage(
-            CoreStage::PreUpdate,
-            client::handle_connection_event,
-        );
+        app.add_systems(PreUpdate, client::send_client_network_events);
+        app.add_systems(PreUpdate, client::handle_connection_event);
     }
 }

@@ -35,6 +35,7 @@ impl ServerConnection {
 
 /// An instance of a [`NetworkClient`] is used to connect to a remote server
 /// using [`NetworkClient::connect`]
+#[derive(Resource)]
 pub struct NetworkClient {
     runtime: Runtime,
     server_connection: Option<ServerConnection>,
@@ -194,7 +195,7 @@ impl AppNetworkClientMessage for App {
         client.recv_message_map.insert(T::NAME, Vec::new());
 
         self.add_event::<NetworkData<T>>();
-        self.add_system_to_stage(CoreStage::PreUpdate, register_client_message::<T>)
+        self.add_systems(PreUpdate, register_client_message::<T>)
     }
 }
 
