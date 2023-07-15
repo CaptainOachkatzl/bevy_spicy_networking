@@ -12,22 +12,22 @@ fn main() {
 
     // You need to add the `ClientPlugin` first before you can register
     // `ClientMessage`s
-    app.add_plugin(bevy_spicy_networking::ClientPlugin);
+    app.add_plugins(bevy_spicy_networking::ClientPlugin);
 
     // A good way to ensure that you are not forgetting to register
     // any messages is to register them where they are defined!
     shared::client_register_network_messages(&mut app);
 
-    app.add_startup_system(setup_ui);
+    app.add_systems(Startup, setup_ui);
 
-    app.add_system(handle_connect_button);
-    app.add_system(handle_message_button);
-    app.add_system(handle_incoming_messages);
-    app.add_system(handle_network_events);
+    app.add_systems(Update, handle_connect_button);
+    app.add_systems(Update, handle_message_button);
+    app.add_systems(Update, handle_incoming_messages);
+    app.add_systems(Update, handle_network_events);
 
     app.init_resource::<GlobalChatSettings>();
 
-    app.add_system_to_stage(CoreStage::PostUpdate, handle_chat_area);
+    app.add_systems(PostUpdate, handle_chat_area);
 
     app.run();
 }
@@ -61,9 +61,7 @@ fn handle_network_events(
         info!("Received event: {:?}", event);
         match event {
             ClientNetworkEvent::Connected => {
-                messages.add(SystemMessage::new(
-                    "Succesfully connected to server!".to_string(),
-                ));
+                messages.add(SystemMessage::new("Succesfully connected to server!".to_string()));
                 text.sections[0].value = String::from("Disconnect");
             }
 
@@ -82,6 +80,7 @@ fn handle_network_events(
 ////////////// Data Definitions ///////////////////////////////
 ///////////////////////////////////////////////////////////////
 
+#[derive(Resource)]
 struct GlobalChatSettings {
     chat_style: TextStyle,
     author_style: TextStyle,
@@ -188,10 +187,7 @@ struct ConnectButton;
 
 fn handle_connect_button(
     mut net: ResMut<NetworkClient>,
-    interaction_query: Query<
-        (&Interaction, &Children),
-        (Changed<Interaction>, With<ConnectButton>),
-    >,
+    interaction_query: Query<(&Interaction, &Children), (Changed<Interaction>, With<ConnectButton>)>,
     mut text_query: Query<&mut Text>,
     mut messages: Query<&mut GameChatMessages>,
 ) {
@@ -199,7 +195,7 @@ fn handle_connect_button(
 
     for (interaction, children) in interaction_query.iter() {
         let mut text = text_query.get_mut(children[0]).unwrap();
-        if let Interaction::Clicked = interaction {
+        if let Interaction::Pressed = interaction {
             if net.is_connected() {
                 net.disconnect();
             } else {
@@ -234,15 +230,12 @@ fn handle_message_button(
     let mut messages = messages.single_mut();
 
     for interaction in interaction_query.iter() {
-        if let Interaction::Clicked = interaction {
+        if let Interaction::Pressed = interaction {
             match net.send_message(shared::UserChatMessage {
                 message: String::from("Hello there!"),
             }) {
                 Ok(()) => (),
-                Err(err) => messages.add(SystemMessage::new(format!(
-                    "Could not send message: {}",
-                    err
-                ))),
+                Err(err) => messages.add(SystemMessage::new(format!("Could not send message: {}", err))),
             }
         }
     }
@@ -266,7 +259,7 @@ fn handle_chat_area(
         .messages
         .iter()
         .flat_map(|msg| {
-            std::array::IntoIter::new([
+            IntoIterator::into_iter([
                 TextSection {
                     value: format!("{}: ", msg.get_author()),
                     style: chat_settings.author_style.clone(),
@@ -277,62 +270,54 @@ fn handle_chat_area(
                 },
             ])
         })
-        .collect::<Vec<_>>();
+        .collect::<Vec<TextSection>>();
 
     let mut text = chat_text_query.single_mut();
 
     text.sections = sections;
 }
 
-fn setup_ui(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
-    commands.spawn_bundle(UiCameraBundle::default());
+fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.spawn(Camera2dBundle::default());
 
-    commands.spawn_bundle((GameChatMessages::new(),));
+    commands.spawn((GameChatMessages::new(),));
 
     commands
-        .spawn_bundle(NodeBundle {
+        .spawn(NodeBundle {
             style: Style {
-                size: Size::new(Val::Percent(100.), Val::Percent(100.)),
                 justify_content: JustifyContent::SpaceBetween,
                 flex_direction: FlexDirection::ColumnReverse,
                 ..Default::default()
             },
-            color: UiColor::from(Color::NONE),
+            background_color: BackgroundColor::from(Color::NONE),
             ..Default::default()
         })
         .with_children(|parent| {
             parent
-                .spawn_bundle(NodeBundle {
+                .spawn(NodeBundle {
                     style: Style {
-                        size: Size::new(Val::Percent(100.), Val::Percent(90.)),
+                        height: Val::Percent(90.),
                         ..Default::default()
                     },
                     ..Default::default()
                 })
                 .with_children(|parent| {
-                    parent
-                        .spawn_bundle(TextBundle {
-                            ..Default::default()
-                        })
-                        .insert(ChatArea);
+                    parent.spawn(TextBundle { ..Default::default() }).insert(ChatArea);
                 });
             parent
-                .spawn_bundle(NodeBundle {
+                .spawn(NodeBundle {
                     style: Style {
-                        size: Size::new(Val::Percent(100.), Val::Percent(10.)),
+                        height: Val::Percent(10.),
                         ..Default::default()
                     },
-                    color: UiColor::from(Color::GRAY),
+                    background_color: BackgroundColor::from(Color::GRAY),
                     ..Default::default()
                 })
                 .with_children(|parent_button_bar| {
                     parent_button_bar
-                        .spawn_bundle(ButtonBundle {
+                        .spawn(ButtonBundle {
                             style: Style {
-                                size: Size::new(Val::Percent(50.), Val::Percent(100.)),
+                                width: Val::Percent(50.),
                                 align_items: AlignItems::Center,
                                 justify_content: JustifyContent::Center,
                                 ..Default::default()
@@ -341,17 +326,13 @@ fn setup_ui(
                         })
                         .insert(MessageButton)
                         .with_children(|button| {
-                            button.spawn_bundle(TextBundle {
-                                text: Text::with_section(
+                            button.spawn(TextBundle {
+                                text: Text::from_section(
                                     "Send Message!",
                                     TextStyle {
                                         font: asset_server.load("fonts/Staatliches-Regular.ttf"),
                                         font_size: 40.,
                                         color: Color::BLACK,
-                                    },
-                                    TextAlignment {
-                                        vertical: VerticalAlign::Center,
-                                        horizontal: HorizontalAlign::Center,
                                     },
                                 ),
                                 ..Default::default()
@@ -359,28 +340,24 @@ fn setup_ui(
                         });
 
                     parent_button_bar
-                        .spawn_bundle(ButtonBundle {
+                        .spawn(ButtonBundle {
                             style: Style {
-                                size: Size::new(Val::Percent(50.), Val::Percent(100.)),
                                 align_items: AlignItems::Center,
                                 justify_content: JustifyContent::Center,
+                                width: Val::Percent(50.),
                                 ..Default::default()
                             },
                             ..Default::default()
                         })
                         .insert(ConnectButton)
                         .with_children(|button| {
-                            button.spawn_bundle(TextBundle {
-                                text: Text::with_section(
+                            button.spawn(TextBundle {
+                                text: Text::from_section(
                                     "Connect to server",
                                     TextStyle {
                                         font: asset_server.load("fonts/Staatliches-Regular.ttf"),
                                         font_size: 40.,
                                         color: Color::BLACK,
-                                    },
-                                    TextAlignment {
-                                        vertical: VerticalAlign::Center,
-                                        horizontal: HorizontalAlign::Center,
                                     },
                                 ),
                                 ..Default::default()
