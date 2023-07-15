@@ -48,6 +48,7 @@ impl std::fmt::Debug for ClientConnection {
     }
 }
 
+#[derive(Resource)]
 /// An instance of a [`NetworkServer`] is used to listen for new client connections
 /// using [`NetworkServer::listen`]
 pub struct NetworkServer {
@@ -62,11 +63,7 @@ pub struct NetworkServer {
 
 impl std::fmt::Debug for NetworkServer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "NetworkServer [{} Connected Clients]",
-            self.established_connections.len()
-        )
+        write!(f, "NetworkServer [{} Connected Clients]", self.established_connections.len())
     }
 }
 
@@ -90,10 +87,7 @@ impl NetworkServer {
     ///
     /// ## Note
     /// If you are already listening for new connections, then this will disconnect existing connections first
-    pub fn listen(
-        &mut self,
-        addr: impl ToSocketAddrs + Send + 'static,
-    ) -> Result<(), NetworkError> {
+    pub fn listen(&mut self, addr: impl ToSocketAddrs + Send + 'static) -> Result<(), NetworkError> {
         self.stop();
 
         let new_connections = self.new_connections.sender.clone();
@@ -139,11 +133,7 @@ impl NetworkServer {
     }
 
     /// Send a message to a specific client
-    pub fn send_message<T: ClientMessage>(
-        &self,
-        client_id: ConnectionId,
-        message: T,
-    ) -> Result<(), NetworkError> {
+    pub fn send_message<T: ClientMessage>(&self, client_id: ConnectionId, message: T) -> Result<(), NetworkError> {
         let connection = match self.established_connections.get(&client_id) {
             Some(conn) => conn,
             None => return Err(NetworkError::ConnectionNotFound(client_id)),
@@ -258,7 +248,9 @@ pub(crate) fn handle_new_incoming_connections(
                                     Ok(len) => len as usize,
                                     Err(err) => {
                                         // If we get an EOF here, the connection was broken and we simply report a 'disconnected' signal
-                                        if err.kind() == std::io::ErrorKind::UnexpectedEof { break }
+                                        if err.kind() == std::io::ErrorKind::UnexpectedEof {
+                                            break;
+                                        }
 
                                         error!("Encountered error while reading length [{}]: {}", conn_id, err);
                                         break;
@@ -268,10 +260,12 @@ pub(crate) fn handle_new_incoming_connections(
                                 trace!("Received packet with length: {}", length);
 
                                 if length > network_settings.max_packet_length {
-                                    error!("Received too large packet from [{}]: {} > {}", conn_id, length, network_settings.max_packet_length);
+                                    error!(
+                                        "Received too large packet from [{}]: {} > {}",
+                                        conn_id, length, network_settings.max_packet_length
+                                    );
                                     break;
                                 }
-
 
                                 match read_socket.read_exact(&mut buffer[..length]).await {
                                     Ok(_) => (),
@@ -317,7 +311,7 @@ pub(crate) fn handle_new_incoming_connections(
                             while let Some(message) = recv_message.recv().await {
                                 let encoded = match bincode::serialize(&message) {
                                     Ok(encoded) => encoded,
-                                    Err(err) =>  {
+                                    Err(err) => {
                                         error!("Could not encode packet {:?}: {}", message, err);
                                         continue;
                                     }
@@ -359,9 +353,7 @@ pub(crate) fn handle_new_incoming_connections(
     let disconnected_connections = &server.disconnected_connections.receiver;
 
     for disconnected_connection in disconnected_connections.try_iter() {
-        server
-            .established_connections
-            .remove(&disconnected_connection);
+        server.established_connections.remove(&disconnected_connection);
         network_events.send(ServerNetworkEvent::Disconnected(disconnected_connection));
     }
 }
@@ -380,7 +372,10 @@ pub trait AppNetworkServerMessage {
 
 impl AppNetworkServerMessage for App {
     fn listen_for_server_message<T: ServerMessage>(&mut self) -> &mut Self {
-        let server = self.world.get_resource::<NetworkServer>().expect("Could not find `NetworkServer`. Be sure to include the `ServerPlugin` before listening for server messages.");
+        let server = self
+            .world
+            .get_resource::<NetworkServer>()
+            .expect("Could not find `NetworkServer`. Be sure to include the `ServerPlugin` before listening for server messages.");
 
         debug!("Registered a new ServerMessage: {}", T::NAME);
 
@@ -391,14 +386,12 @@ impl AppNetworkServerMessage for App {
         );
         server.recv_message_map.insert(T::NAME, Vec::new());
         self.add_event::<NetworkData<T>>();
-        self.add_system_to_stage(CoreStage::PreUpdate, register_server_message::<T>)
+        self.add_systems(PreUpdate, register_server_message::<T>)
     }
 }
 
-fn register_server_message<T>(
-    net_res: ResMut<NetworkServer>,
-    mut events: EventWriter<NetworkData<T>>,
-) where
+fn register_server_message<T>(net_res: ResMut<NetworkServer>, mut events: EventWriter<NetworkData<T>>)
+where
     T: ServerMessage,
 {
     let mut messages = match net_res.recv_message_map.get_mut(T::NAME) {
